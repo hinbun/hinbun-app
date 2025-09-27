@@ -1,7 +1,6 @@
-// /api/tts.js
 export default async function handler(req, res) {
-  // CORS headers - sadece kendi uygulamanızdan gelen istekleri kabul et
-  res.setHeader('Access-Control-Allow-Origin', '*'); // Sonra kısıtlayacağız
+  // CORS headers
+  res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   
@@ -14,56 +13,90 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { text, languageCode, voiceName, speakingRate = 0.85, pitch = 0 } = req.body;
+    const { text, languageCode, voiceName, speakingRate = 0.85, pitch = 0, volumeGainDb = 0 } = req.body;
     
+    // Validation
     if (!text || !languageCode) {
-      return res.status(400).json({ error: 'Missing text or languageCode' });
+      return res.status(400).json({ error: 'Missing required fields: text, languageCode' });
     }
 
-    // Güvenlik: Text uzunluğu kontrolü
     if (text.length > 5000) {
-      return res.status(400).json({ error: 'Text too long' });
+      return res.status(400).json({ error: 'Text too long (max 5000 characters)' });
     }
 
-    // Google TTS API key - sadece sunucuda!
+    // Get API key from environment
     const apiKey = process.env.GOOGLE_TTS_API_KEY;
     if (!apiKey) {
-      return res.status(500).json({ error: 'API key not configured' });
+      console.error('GOOGLE_TTS_API_KEY not configured');
+      return res.status(500).json({ error: 'TTS service not configured' });
     }
 
+    // Prepare request for Google TTS API
     const googleUrl = `https://texttospeech.googleapis.com/v1/text:synthesize?key=${apiKey}`;
     
     const requestBody = {
       input: { text },
       voice: { 
         languageCode, 
-        name: voiceName || 'en-US-Chirp-HD-F' 
+        name: voiceName || getDefaultVoice(languageCode)
       },
       audioConfig: {
         audioEncoding: 'MP3',
-        speakingRate: parseFloat(speakingRate),
-        pitch: parseFloat(pitch),
-        volumeGainDb: 0
+        speakingRate: parseFloat(speakingRate) || 0.85,
+        pitch: parseFloat(pitch) || 0.0,
+        volumeGainDb: parseFloat(volumeGainDb) || 0.0,
+        effectsProfileId: ['headphone-class-device']
       }
     };
 
+    console.log(`TTS Request: ${text.substring(0, 50)}... (${languageCode})`);
+
+    // Call Google TTS API
     const response = await fetch(googleUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        'User-Agent': 'HinbunApp-Proxy/1.0'
+      },
       body: JSON.stringify(requestBody)
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('Google TTS Error:', errorText);
-      return res.status(response.status).json({ error: 'TTS service failed' });
+      console.error('Google TTS API Error:', response.status, errorText);
+      return res.status(response.status).json({ 
+        error: 'TTS service failed',
+        details: response.status === 403 ? 'API key restrictions or quota exceeded' : 'Service temporarily unavailable'
+      });
     }
 
     const data = await response.json();
+    
+    if (!data.audioContent) {
+      return res.status(500).json({ error: 'Invalid response from TTS service' });
+    }
+
     return res.status(200).json(data);
 
   } catch (error) {
-    console.error('Proxy error:', error);
-    return res.status(500).json({ error: 'Internal server error' });
+    console.error('TTS Proxy Error:', error);
+    return res.status(500).json({ 
+      error: 'Internal server error',
+      message: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
+}
+
+// Helper function for default voices
+function getDefaultVoice(languageCode) {
+  const voiceMap = {
+    'tr-TR': 'tr-TR-Chirp3-HD-Algenib',
+    'en-US': 'en-US-Chirp-HD-F',
+    'nb-NO': 'nb-NO-Chirp3-HD-Alnilam',
+    'pl-PL': 'pl-PL-Chirp3-HD-Charon',
+    'es-ES': 'es-ES-Neural2-F',
+    'fr-FR': 'fr-FR-Neural2-D',
+    'de-DE': 'de-DE-Neural2-D'
+  };
+  return voiceMap[languageCode] || 'en-US-Chirp-HD-F';
 }
