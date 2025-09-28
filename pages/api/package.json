@@ -1,20 +1,14 @@
 {
-  "name": "hinbun-api-proxy",
-  "version": "1.0.0",
-  "description": "Secure API proxy for Hinbun language learning app",
-  "main": "index.js",
+  "name": "hinbun-api-proxy", 
+  "version": "1.2.4",
   "scripts": {
-    "dev": "vercel dev",
-    "build": "echo 'No build step required for serverless functions'",
-    "start": "vercel dev"
+    "dev": "next dev",
+    "build": "next build", 
+    "start": "next start"
   },
-  "keywords": ["api", "proxy", "hinbun", "tts", "openai"],
-  "author": "Ferhat Caldira",
-  "license": "MIT",
   "dependencies": {
-    "@vercel/node": "^3.0.0"
-  },
-  "engines": {
-    "node": ">=18.0.0"
+    "next": "14.0.0",
+    "react": "18.0.0",
+    "react-dom": "18.0.0"
   }
 }
